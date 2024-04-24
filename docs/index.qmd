@@ -1,0 +1,153 @@
+---
+title: "Explore spotify songs"
+format: html
+editor_options: 
+  chunk_output_type: console
+---
+
+# Aim
+
+Explore the spotify dataset from Tidytuesday. Build a model.
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(performance)
+library(sjPlot)
+
+theme_set(theme_light(base_size = 6))
+```
+
+
+## Read data
+
+```{r}
+spoty_raw <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-21/spotify_songs.csv')
+
+spoty_raw |> 
+    count(track_id, sort = TRUE) |> 
+    count(n, sort = TRUE)
+
+spoty <- 
+    spoty_raw |> 
+    group_by(track_id) |> 
+    slice(1) |> 
+    ungroup()
+
+spoty |> 
+    glimpse()
+
+```
+
+## Explore genres
+
+```{r}
+spoty |> 
+    count(playlist_genre)
+
+spoty |> 
+    count(playlist_subgenre)
+
+spoty |> 
+    count(playlist_genre, playlist_subgenre)
+    
+```
+
+# Explore duration
+
+```{r}
+qplot(spoty$duration_ms/1000, xlab = "Length of song in seconds") +
+    labs(subtitles = "Most songs are between 3 and 5 minutes")
+```
+
+
+```{r}
+
+spoty_long <- 
+    spoty |>
+    pivot_longer(danceability:duration_ms,
+                 names_to = "feature",
+                 values_to = "value")
+    
+
+spoty_long |> 
+    ggplot() +
+    aes(x = playlist_genre, y = value, fill = playlist_genre) +
+    geom_boxplot(show.legend = FALSE) +
+    facet_wrap(~feature, scales = "free_y")
+    
+
+spoty_long |> 
+    ggplot() +
+    aes(x = playlist_genre, y = value) +
+    stat_summary(geom = "pointrange", fun.data = "mean_se") +
+    facet_wrap(~feature, scales = "free_y")
+
+
+feature_by_subgenre <- 
+    spoty_long |> 
+    group_by(feature, playlist_genre, playlist_subgenre) |> 
+    summarise(avg = mean(value),
+              se = sd(value)/n(), .groups = "drop")
+
+feature_by_subgenre |> 
+    mutate(playlist_subgenre = reorder_within(playlist_subgenre, avg, feature)) |> 
+    ggplot() +
+    aes(y = playlist_subgenre, x = avg, xmin = avg - se, xmax = avg + se,
+        color = playlist_genre) +
+    geom_pointrange() +
+    scale_y_reordered() +
+    facet_wrap(~feature, scales = "free") +
+    labs(x = NULL, y = NULL, title = "Features of music tracks by subgenre") 
+
+    
+```
+
+```{r}
+qplot(spoty$track_popularity)
+
+spoty |> 
+    arrange(-track_popularity) |> 
+    view()
+
+```
+
+
+```{r}
+mod1 <- 
+    lm(track_popularity ~ scale(danceability) + scale(valence) * playlist_genre, data = spoty)
+
+summary(mod1)
+
+tab_model(mod1, show.se = TRUE, show.stat = TRUE, show.aic = TRUE)
+
+
+```
+
+```{r}
+spoty |> 
+    filter(track_popularity != 0) |> 
+    ggplot() +
+    aes(x = danceability, y = track_popularity) +
+    geom_point() +
+    geom_smooth(method = "lm")
+    
+
+
+```
+
+
+## Assumption checks
+
+```{r}
+check_collinearity(mod1)
+check_heteroscedasticity(mod1)
+check_autocorrelation(mod1)
+check_outliers(mod1)
+
+#Did not run properly
+# check_model(mod1)
+
+```
+
+
