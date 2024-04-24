@@ -5,9 +5,10 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Aim
+# Aims
 
-Explore the spotify dataset from Tidytuesday. Build a model.
+1) Explore the spotify dataset from Tidytuesday (source: https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-01-21/readme.md). 
+2) Build a statistical model.
 
 ```{r}
 library(tidyverse)
@@ -15,31 +16,36 @@ library(tidytext)
 library(performance)
 library(sjPlot)
 
-theme_set(theme_light(base_size = 6))
+theme_set(theme_light())
 ```
 
 
 ## Read data
 
 ```{r}
-spoty_raw <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-21/spotify_songs.csv')
+spoty_raw <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-01-21/spotify_songs.csv')
 
+# There are duplicates in the dataset
 spoty_raw |> 
     count(track_id, sort = TRUE) |> 
     count(n, sort = TRUE)
 
+# Remove duplicates
 spoty <- 
     spoty_raw |> 
     group_by(track_id) |> 
     slice(1) |> 
     ungroup()
 
+# Explore variables
 spoty |> 
     glimpse()
 
 ```
 
 ## Explore genres
+
+There are 6 genres, and each has 4 subgenres.
 
 ```{r}
 spoty |> 
@@ -60,30 +66,31 @@ qplot(spoty$duration_ms/1000, xlab = "Length of song in seconds") +
     labs(subtitles = "Most songs are between 3 and 5 minutes")
 ```
 
-
+## Explore musical features
 ```{r}
-
+# Transform data into long format
 spoty_long <- 
     spoty |>
     pivot_longer(danceability:duration_ms,
                  names_to = "feature",
                  values_to = "value")
     
-
+# Boxplot is not the best choice to visualize results
 spoty_long |> 
     ggplot() +
     aes(x = playlist_genre, y = value, fill = playlist_genre) +
     geom_boxplot(show.legend = FALSE) +
     facet_wrap(~feature, scales = "free_y")
     
-
+# Let ggplot calculate mean and SE using the stat_summary() function
 spoty_long |> 
     ggplot() +
     aes(x = playlist_genre, y = value) +
     stat_summary(geom = "pointrange", fun.data = "mean_se") +
     facet_wrap(~feature, scales = "free_y")
 
-
+# When we want to plot by subgenre, we need to reorganize the plot
+# We also need to reorganize subgenre names withing each feature
 feature_by_subgenre <- 
     spoty_long |> 
     group_by(feature, playlist_genre, playlist_subgenre) |> 
@@ -103,15 +110,19 @@ feature_by_subgenre |>
     
 ```
 
+## Explore popularity
+
+It seems zero-inflated.
+
 ```{r}
 qplot(spoty$track_popularity)
 
 spoty |> 
-    arrange(-track_popularity) |> 
-    view()
+    arrange(-track_popularity)
 
 ```
 
+## Build a linear regression model to predict popularity
 
 ```{r}
 mod1 <- 
@@ -131,8 +142,6 @@ spoty |>
     aes(x = danceability, y = track_popularity) +
     geom_point() +
     geom_smooth(method = "lm")
-    
-
 
 ```
 
